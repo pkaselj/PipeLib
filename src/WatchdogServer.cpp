@@ -11,7 +11,7 @@
 // #define VOLATILE_pExpiredpTimers ((std::list<Timer*>*) & m_expired_pTimers)
 
 WatchdogServer::WatchdogServer(const std::string name, ProcessManager* pProcessManager, ILogger* pLogger)
-	:	m_mailbox(name + ".server", pLogger), // DEBUG
+	:	m_mailbox(name + ".server"),
 	m_pLogger(pLogger),
 	m_name(name),
 	objectMutex(),
@@ -57,21 +57,14 @@ void WatchdogServer::Start()
 	// StartSynchronization(200, 10);
 
 	std::thread requestParserThread(&WatchdogServer::StartListeningForRequests, this);
-	std::thread unitWatcherThread(&WatchdogServer::StartCheckingForExpiredUnits, this);
+	// std::thread unitWatcherThread(&WatchdogServer::StartCheckingForExpiredUnits, this);
+
+	StartCheckingForExpiredUnits();
+	
 
 	requestParserThread.join();
-	unitWatcherThread.join();
-	
-	/*while (m_terminationFlag == false)
-	{
-		StartCheckingForExpiredUnits();
-		StartListeningForRequests();
-	}*/
+	// unitWatcherThread.join();
 
-
-	// *m_pLogger << m_name + " - Terminating all units w Process Manager!";
-	// m_pProcessManager->killAll();
-	// m_units.clear();
 	TerminateAll();
 	*m_pLogger << m_name + " - Termination!";
 }
@@ -125,7 +118,7 @@ WatchdogMessage WatchdogServer::listenForMessage(WatchdogMessage::MessageClass m
 	WatchdogMessage received_message_parsed;
 	received_message_parsed.Unpack(received_message);
 
-	*m_pLogger << m_name + " - WatchdogMessage received: " + received_message_parsed.getInfo();
+	// *m_pLogger << m_name + " - WatchdogMessage received: " + received_message_parsed.getInfo();
 
 	return received_message_parsed;
 }
@@ -190,19 +183,19 @@ void WatchdogServer::SetPeriod_us(unsigned int period_us)
 
 void WatchdogServer::ParseRequest(WatchdogMessage& request)
 {
-
+	std::lock_guard<std::mutex> lock(objectMutex);
 	using MessageClass = WatchdogMessage::MessageClass;
 	switch (request.getMessageClass())
 	{
 	case MessageClass::REGISTER_REQUEST:
 	{
-		std::lock_guard<std::mutex> lock(objectMutex);
+		// std::lock_guard<std::mutex> lock(objectMutex);
 		AddNewUnit(request);
 	}
 		break;
 	case MessageClass::UNREGISTER_REQUEST:
 	{
- 		std::lock_guard<std::mutex> lock(objectMutex);
+ 		// std::lock_guard<std::mutex> lock(objectMutex);
 		RemoveUnit(request);
 	}
 		break;
@@ -236,14 +229,6 @@ void WatchdogServer::ParseRequest(WatchdogMessage& request)
 // Deprecated
 void WatchdogServer::MarkTimerExpired(void* pExpiredTimer_voidptr)
 {
-	/*
-	
-	Timer* pExpiredTimer = (Timer*)pExpiredTimer_voidptr;
-	// std::cout << "Timer expired - WDS " << pExpiredTimer->getName() << std::endl;
-	std::cout << "Timer expired - WDS, timer address: " << std::hex << (unsigned int)pExpiredTimer << " PID " << getpid() << std::endl;
-	std::cout << "Timer status: " << pExpiredTimer->getTimerStatus() << std::endl;
-
-	*/
 
 	*m_pLogger << m_name +  " - Timer expired!";
 }
@@ -252,18 +237,15 @@ void WatchdogServer::StartCheckingForExpiredUnits()
 {
 	 while (m_terminationFlag == false) // MT only
 	{
-		//std::cout << "CHECK" << std::endl;
 		 usleep(m_period_us); // only on MT
 
 		// TODO mutex lock?
  		std::unique_lock<std::mutex> mutexLock(objectMutex);
 		for (auto unit = m_units.begin(); unit != m_units.end(); ++unit)
 		{
-			//std::cout << "UNIT" << std::endl;
 
 			if (unit->Expired())
 			{
-				//std::cout << "Expired" << std::endl;
 				int remainingTTL = unit->DecrementAndReturnTTL();
 
 
@@ -277,7 +259,6 @@ void WatchdogServer::StartCheckingForExpiredUnits()
 
 				if (remainingTTL == 0)
 				{
-					//std::cout << "Terminate" << std::endl;
 					// m_terminationFlag = true;
 					HandleUnitExpiration(unit);
 
@@ -338,7 +319,7 @@ void WatchdogServer::TerminateAll()
 		m_units.pop_front();
 
 		pUnit->StopTimer();
-		// SendTerminateBroadcast(*pUnit);
+		SendTerminateBroadcast(*pUnit);
 	}
 
 	// sleep(5);
@@ -354,10 +335,11 @@ void WatchdogServer::SendTerminateBroadcast(WatchdogUnit& unit)
 
 	m_mailbox.sendConnectionless(destination, &terminate_broadcast);
 
-	srand(time(NULL));
-	terminate_broadcast.DumpSerialData("server_terminate_broadcast_" + std::to_string(rand() % 1000));
+	// srand(time(NULL));
+	// terminate_broadcast.DumpSerialData("server_terminate_broadcast_" + std::to_string(rand() % 1000));
 
 	*m_pLogger << m_name + " - Terminate broadcast sent to unit: " + unit.getName();
+
 }
 
 void WatchdogServer::InitTimeoutCallback()
@@ -497,7 +479,11 @@ void WatchdogServer::UnitRequestedTermination(WatchdogMessage& request)
 
 	auto position = getIteratorMatching(request.getName(), enuActionOnSearchFailure::Ignore);
 
-	// TODO
+	if (position != m_units.end())
+	{
+		HandleUnitExpiration(position);
+	}
+	
 }
 
 std::list<WatchdogUnit>::iterator WatchdogServer::getIteratorMatching(const std::string& name, enuActionOnSearchFailure action)
@@ -527,7 +513,9 @@ std::list<WatchdogUnit>::iterator WatchdogServer::getIteratorMatching(const std:
 
 
 WatchdogUnit::WatchdogUnit(const std::string& name, const SlotSettings& settings, unsigned int PID, enuActionOnFailure onFailure, ILogger* pLogger)
-	:	m_name(name), m_settings(settings), m_pLogger(pLogger), m_timer(name + std::string(".timer"), pLogger), m_PID(PID), m_onFailure(onFailure)
+	// : m_name(name), m_settings(settings), m_pLogger(pLogger), m_timer(name + std::string(".timer")), m_PID(PID), m_onFailure(onFailure)
+    // :	m_name(name), m_settings(settings), m_pLogger(pLogger), m_timer(name + std::string(".timer"), pLogger), m_PID(PID), m_onFailure(onFailure)
+	 : m_name(name), m_settings(settings), m_pLogger(pLogger), m_timer(name + std::string(".timer"), new Logger(name + ".timer.log")), m_PID(PID), m_onFailure(onFailure) // DEBUG LEAK
 {
 
 	if (m_pLogger == nullptr)
@@ -598,6 +586,7 @@ bool WatchdogUnit::Expired()
 
 int WatchdogUnit::DecrementAndReturnTTL()
 {
+
 	if (m_TTL != 0)
 	{
 		--m_TTL;

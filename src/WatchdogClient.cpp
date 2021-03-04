@@ -146,7 +146,7 @@ WatchdogMessage WatchdogClient::receiveAndCheckInputMessageFrom(const std::strin
 	return received_response;
 }
 
-void WatchdogClient::sendSignal(WatchdogMessage::MessageClass messageClass, enuReceiveOptions sendOptions)
+void WatchdogClient::sendSignal(WatchdogMessage::MessageClass messageClass, enuSendOptions sendOptions)
 {
 	*m_pLogger << m_unitName + " - WatchdogUnit - preparing signal( " + WatchdogMessage::getMessageClassName(messageClass) + " ) for: " + m_serverName;
 
@@ -155,11 +155,11 @@ void WatchdogClient::sendSignal(WatchdogMessage::MessageClass messageClass, enuR
 
 	WatchdogMessage signal_message(m_unitName, m_settings, m_PID, m_onFailure, messageClass);
 
-	if ((sendOptions & enuReceiveOptions::NORMAL) != 0)
+	if (sendOptions % enuSendOptions::NORMAL)
 	{
 		m_mailbox.send(m_server, &signal_message);
 	}
-	else if ((sendOptions & enuReceiveOptions::CONNECTIONLESS) != 0)
+	else if (sendOptions % enuSendOptions::CONNECTIONLESS)
 	{
 		m_mailbox.sendConnectionless(m_server, &signal_message);
 	}
@@ -180,24 +180,24 @@ void WatchdogClient::sendSignal(WatchdogMessage::MessageClass messageClass, enuR
 
 void WatchdogClient::Unregister()
 {
-	sendSignal(WatchdogMessage::MessageClass::UNREGISTER_REQUEST, enuReceiveOptions::CONNECTIONLESS);
+	sendSignal(WatchdogMessage::MessageClass::UNREGISTER_REQUEST, enuSendOptions::CONNECTIONLESS);
 }
 
 void WatchdogClient::Start()
 {
-	sendSignal(WatchdogMessage::MessageClass::START, enuReceiveOptions::CONNECTIONLESS);
+	sendSignal(WatchdogMessage::MessageClass::START, enuSendOptions::CONNECTIONLESS);
 }
 
 void WatchdogClient::Stop()
 {
-	sendSignal(WatchdogMessage::MessageClass::STOP, enuReceiveOptions::CONNECTIONLESS);
+	sendSignal(WatchdogMessage::MessageClass::STOP, enuSendOptions::CONNECTIONLESS);
 }
 
 bool WatchdogClient::Kick()
 {
-	sendSignal(WatchdogMessage::MessageClass::KICK, enuReceiveOptions::CONNECTIONLESS);
+	sendSignal(WatchdogMessage::MessageClass::KICK, enuSendOptions::CONNECTIONLESS);
 
-	BasicDataMailboxMessage received_message = m_mailbox.receive(enuReceiveOptions::CONNECTIONLESS | enuReceiveOptions::NONBLOCKING);
+	BasicDataMailboxMessage received_message = m_mailbox.receive(enuReceiveOptions::NONBLOCKING);
 	if (received_message.getDataType() == MessageDataType::EmptyQueue)
 	{
 		*m_pLogger << m_unitName + " - No messages in queue!";
@@ -231,13 +231,13 @@ bool WatchdogClient::Kick()
 
 void WatchdogClient::Terminate()
 {
-	sendSignal(WatchdogMessage::MessageClass::TERMINATE_REQUEST, enuReceiveOptions::CONNECTIONLESS);
+	sendSignal(WatchdogMessage::MessageClass::TERMINATE_REQUEST, enuSendOptions::CONNECTIONLESS);
 }
 
 void WatchdogClient::UpdateSettings(const SlotSettings& settings)
 {
 	setSettings(settings);
-	sendSignal(WatchdogMessage::MessageClass::UPDATE_SETTINGS, enuReceiveOptions::CONNECTIONLESS);
+	sendSignal(WatchdogMessage::MessageClass::UPDATE_SETTINGS, enuSendOptions::CONNECTIONLESS);
 }
 
 void WatchdogClient::Sync()

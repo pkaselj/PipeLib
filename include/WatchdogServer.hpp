@@ -38,7 +38,7 @@ public:
 private:
 
 	const enuActionOnFailure m_onFailure;
-	Timer m_timer;
+	Timer m_timer; // ranodm int to timer name
 	ILogger* m_pLogger;
 	std::string m_name;
 	SlotSettings m_settings;
