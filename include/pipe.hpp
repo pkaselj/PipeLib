@@ -46,7 +46,7 @@ public:
          * @brief Construct a new Pipe object with logger
          * 
          * @param path FIFO path. Created if it doesn't exist.
-         * @param mode Pipe access mode {Kernel::IOMode::READ, Kernel::IOMode::WRITE}
+         * @param mode Pipe access mode {Kernel::IOMode::READ, Kernel::IOMode::WRITE, Kernel::IOMode::READ_NONBLOCKING}
          * @param p_logger pointer to a logger
          */
          Pipe           (const std::string& path, Kernel::IOMode::IOMode mode, ILogger* p_logger = NulLogger::getInstance());
@@ -89,8 +89,9 @@ public:
      */
     std::string receive (void);
 
-    void setNonblockingPermanent();
-    void setBlockingPermanent();
+
+    // void setNonblockingPermanent();
+    // void setBlockingPermanent();
 };
 
 #endif
